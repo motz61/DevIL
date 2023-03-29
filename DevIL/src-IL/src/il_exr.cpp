@@ -14,15 +14,10 @@
 #include "il_internal.h"
 #ifndef IL_NO_EXR
 
-#ifndef HAVE_CONFIG_H // We are probably on a Windows box .
-//#define OPENEXR_DLL
-#define HALF_EXPORTS
-#endif //HAVE_CONFIG_H
-
 #include "il_exr.h"
-#include <ImfRgba.h>
-#include <ImfArray.h>
-#include <ImfRgbaFile.h>
+#include <OpenEXR/ImfRgba.h>
+#include <OpenEXR/ImfArray.h>
+#include <OpenEXR/ImfRgbaFile.h>
 //#include <ImfTiledRgbaFile.h>
 //#include <ImfInputFile.h>
 //#include <ImfTiledInputFile.h>

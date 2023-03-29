@@ -313,39 +313,31 @@ ILboolean iLoadJp2Internal(jas_stream_t	*Stream, ILimage *Image)
 }
 
 
-
-// Hack to compile against different versions of Jasper which expect
-// slightly different function types for their callbacks.  The defined()
-// checks are just looking for sybols that happen to have arrived around
-// the same time as the API change, so no reason they won't break in the
-// future :-(  Hopefully by the time it does nobody will care about pre-2.0.20
-// versions of jasper
-//
-// see: https://github.com/OSGeo/gdal/commit/9ef8e16e27c5fc4c491debe50bf2b7f3e94ed334
-//      https://github.com/DentonW/DevIL/issues/90
-#if defined(PRIjas_seqent)
-static int iJp2_file_read(jas_stream_obj_t *obj, char *buf, unsigned cnt)
+#ifdef __APPLE__
+static ssize_t iJp2_file_read(void *obj, char *buf, size_t cnt)
 #else
-static int iJp2_file_read(jas_stream_obj_t *obj, char *buf, int cnt)
+static ssize_t iJp2_file_read(jas_stream_obj_t *obj, char *buf, size_t cnt)
 #endif
 {
 	obj;
-	return iread(buf, 1, cnt);
+	return iread((void*)buf, 1, cnt);
 }
 
-#if defined(JAS_INCLUDE_JP2_CODEC)
-static int iJp2_file_write(jas_stream_obj_t *obj, const char *buf, unsigned cnt)
-#elif defined(PRIjas_seqent)
-static int iJp2_file_write(jas_stream_obj_t *obj, char *buf, unsigned cnt)
+#ifdef __APPLE__
+static ssize_t iJp2_file_write(void *obj, const char *buf, size_t cnt)
 #else
-static int iJp2_file_write(jas_stream_obj_t *obj, char *buf, int cnt)
+static ssize_t iJp2_file_write(jas_stream_obj_t *obj, const char *buf, size_t cnt)
 #endif
 {
 	obj;
 	return iwrite(buf, 1, cnt);
 }
 
+#ifdef __APPLE__
 static long iJp2_file_seek(jas_stream_obj_t *obj, long offset, int origin)
+#else
+static long iJp2_file_seek(void *obj, long offset, int origin)
+#endif
 {
 	obj;
 
@@ -362,7 +354,11 @@ static long iJp2_file_seek(jas_stream_obj_t *obj, long offset, int origin)
 	return 0;  // Failed
 }
 
+#ifdef __APPLE__
+static int iJp2_file_close(void *obj)
+#else
 static int iJp2_file_close(jas_stream_obj_t *obj)
+#endif
 {
 	obj;
 	return 0;  // We choose when we want to close the file.

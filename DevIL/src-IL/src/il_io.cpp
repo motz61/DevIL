@@ -79,8 +79,6 @@ ILenum ILAPIENTRY ilTypeFromExt(ILconst_string FileName)
 		Type = IL_BLP;
 	else if (!iStrCmp(Ext, IL_TEXT("cut")))
 		Type = IL_CUT;
-	else if (!iStrCmp(Ext, IL_TEXT("ch")) || !iStrCmp(Ext, IL_TEXT("ct")) || !iStrCmp(Ext, IL_TEXT("sct")))
-		Type = IL_SCITEX;
 	else if (!iStrCmp(Ext, IL_TEXT("dcm")) || !iStrCmp(Ext, IL_TEXT("dicom")))
 		Type = IL_DICOM;
 	else if (!iStrCmp(Ext, IL_TEXT("dpx")))
@@ -127,7 +125,7 @@ ILenum ILAPIENTRY ilTypeFromExt(ILconst_string FileName)
 	else if (!iStrCmp(Ext, IL_TEXT("pix")))
 		Type = IL_PIX;
 	else if (!iStrCmp(Ext, IL_TEXT("pbm")) || !iStrCmp(Ext, IL_TEXT("pgm")) ||
-		!iStrCmp(Ext, IL_TEXT("pnm")) || !iStrCmp(Ext, IL_TEXT("ppm")) || !iStrCmp(Ext, IL_TEXT("pam")))
+		!iStrCmp(Ext, IL_TEXT("pnm")) || !iStrCmp(Ext, IL_TEXT("ppm")))
 		Type = IL_PNM;
 	else if (!iStrCmp(Ext, IL_TEXT("psd")) || !iStrCmp(Ext, IL_TEXT("pdd")))
 		Type = IL_PSD;
@@ -216,11 +214,6 @@ ILenum ILAPIENTRY ilDetermineTypeF(ILHANDLE File)
 		return IL_BMP;
 	#endif
 
-	#ifndef IL_NO_BLP
-	if (ilIsValidBlpF(File))
-		return IL_BLP;
-	#endif
-
 	#ifndef IL_NO_EXR
 	if (ilIsValidExrF(File))
 		return IL_EXR;
@@ -306,11 +299,6 @@ ILenum ILAPIENTRY ilDetermineTypeF(ILHANDLE File)
 		return IL_SGI;
 	#endif
 
-	#ifndef IL_NO_SCITEX
-	if (ilIsValidScitexF(File))
-		return IL_SCITEX;
-	#endif
-
 	#ifndef IL_NO_SUN
 	if (ilIsValidSunF(File))
 		return IL_SUN;
@@ -370,11 +358,6 @@ ILenum ILAPIENTRY ilDetermineTypeL(const void *Lump, ILuint Size)
 	#ifndef IL_NO_BMP
 	if (ilIsValidBmpL(Lump, Size))
 		return IL_BMP;
-	#endif
-
-	#ifndef IL_NO_BLP
-	if (ilIsValidBlpL(Lump, Size))
-		return IL_BLP;
 	#endif
 
 	#ifndef IL_NO_EXR
@@ -457,11 +440,6 @@ ILenum ILAPIENTRY ilDetermineTypeL(const void *Lump, ILuint Size)
 		return IL_PSP;
 	#endif
 
-	#ifndef IL_NO_SCITEX
-	if (ilIsValidScitexL(Lump, Size))
-		return IL_SCITEX;
-	#endif
-
 	#ifndef IL_NO_SGI
 	if (ilIsValidSgiL(Lump, Size))
 		return IL_SGI;
@@ -535,11 +513,6 @@ ILboolean ILAPIENTRY ilIsValid(ILenum Type, ILconst_string FileName)
 		#ifndef IL_NO_BMP
 		case IL_BMP:
 			return ilIsValidBmp(FileName);
-		#endif
-
-		#ifndef IL_NO_BLP
-		case IL_BLP:
-			return ilIsValidBlp(FileName);
 		#endif
 
 		#ifndef IL_NO_DICOM
@@ -627,11 +600,6 @@ ILboolean ILAPIENTRY ilIsValid(ILenum Type, ILconst_string FileName)
 			return ilIsValidPsp(FileName);
 		#endif
 
-		#ifndef IL_NO_SCITEX
-		case IL_SCITEX:
-			return ilIsValidScitex(FileName);
-		#endif
-
 		#ifndef IL_NO_SGI
 		case IL_SGI:
 			return ilIsValidSgi(FileName);
@@ -695,11 +663,6 @@ ILboolean ILAPIENTRY ilIsValidF(ILenum Type, ILHANDLE File)
 		#ifndef IL_NO_PNG
 		case IL_PNG:
 			return ilIsValidPngF(File);
-		#endif
-
-		#ifndef IL_NO_BLP
-		case IL_BLP:
-			return ilIsValidBlpF(File);
 		#endif
 
 		#ifndef IL_NO_BMP
@@ -792,11 +755,6 @@ ILboolean ILAPIENTRY ilIsValidF(ILenum Type, ILHANDLE File)
 			return ilIsValidPspF(File);
 		#endif
 
-		#ifndef IL_NO_SCITEX
-		case IL_SCITEX:
-			return ilIsValidScitexF(File);
-		#endif
-
 		#ifndef IL_NO_SGI
 		case IL_SGI:
 			return ilIsValidSgiF(File);
@@ -865,11 +823,6 @@ ILboolean ILAPIENTRY ilIsValidL(ILenum Type, void *Lump, ILuint Size)
 		#ifndef IL_NO_BMP
 		case IL_BMP:
 			return ilIsValidBmpL(Lump, Size);
-		#endif
-
-		#ifndef IL_NO_BLP
-		case IL_BLP:
-			return ilIsValidBlpL(Lump, Size);
 		#endif
 
 		#ifndef IL_NO_DICOM
@@ -955,11 +908,6 @@ ILboolean ILAPIENTRY ilIsValidL(ILenum Type, void *Lump, ILuint Size)
 		#ifndef IL_NO_PSP
 		case IL_PSP:
 			return ilIsValidPspL(Lump, Size);
-		#endif
-
-		#ifndef IL_NO_SCITEX
-		case IL_SCITEX:
-			return ilIsValidScitexL(Lump, Size);
 		#endif
 
 		#ifndef IL_NO_SGI
@@ -1931,13 +1879,6 @@ ILboolean ILAPIENTRY ilLoadImage(ILconst_string FileName)
 		}
 		#endif
 
-		#ifndef IL_NO_SCITEX
-		if (!iStrCmp(Ext, IL_TEXT("ch")) || !iStrCmp(Ext, IL_TEXT("ct")) || !iStrCmp(Ext, IL_TEXT("sct"))) {
-			bRet = ilLoadScitex(FileName);
-			goto finish;
-		}
-		#endif
-
 		#ifndef IL_NO_DPX
 		if (!iStrCmp(Ext, IL_TEXT("dpx"))) {
 			bRet = ilLoadDpx(FileName);
@@ -2114,10 +2055,6 @@ ILboolean ILAPIENTRY ilLoadImage(ILconst_string FileName)
 			goto finish;
 		}
 		if (!iStrCmp(Ext, IL_TEXT("ppm"))) {
-			bRet = ilLoadPnm(FileName);
-			goto finish;
-		}
-		if (!iStrCmp(Ext, IL_TEXT("pam"))) {
 			bRet = ilLoadPnm(FileName);
 			goto finish;
 		}

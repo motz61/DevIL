@@ -13,7 +13,6 @@ CPPUNIT_TEST_SUITE_REGISTRATION( ILTest );
 #include <limits.h>
 #include <stdio.h>
 #include <iostream>
-#include <stdlib.h>
 
 void ILTest::setUp()
 {
@@ -74,7 +73,7 @@ void ILTest::TestilActiveImage()
   {
 	ilBindImage(MainImage);
 	ilActiveImage(i);
-	sprintf(lBuffer, "%d", i);
+	itoa (i,lBuffer,10);
 	lFinalFilename = lFilename + lBuffer + ".bmp";
 	FILE * lBuffer = fopen(lFinalFilename.c_str() , "wb");
 	CPPUNIT_ASSERT(lBuffer != NULL);

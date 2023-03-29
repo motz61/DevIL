@@ -4,7 +4,7 @@
 // Copyright (C) 2000-2017 by Denton Woods
 // Last modified: 02/28/2009
 //
-// Filename: src-IL/src/il_dds.cpp
+// Filename: src-IL/src/il_dds.c
 //
 // Description: Reads from a DirectDraw Surface (.dds) file.
 //
@@ -30,9 +30,7 @@
 
 
 // Global variables
-//@TODO: Move these out of global space
 static DDSHEAD	Head;				// Image header
-static DXT10HEAD HeadDXT10;			// DirectX 10 extension header
 static ILubyte	*CompData = NULL;	// Compressed data
 static ILuint	CompSize;			// Compressed size
 //static ILuint	CompFormat;			// Compressed format
@@ -136,19 +134,6 @@ ILboolean iGetDdsHead(DDSHEAD *Header)
 }
 
 
-// Internal function used to get the DirectX 10 DDS header extension (24 bytes)
-ILboolean iGetDXT10Head(DXT10HEAD *Header)
-{
-	Header->dxgiFormat = GetLittleUInt();
-	Header->resourceDimension = GetLittleUInt();
-	Header->miscFlag = GetLittleUInt();
-	Header->arraySize = GetLittleUInt();
-	Header->miscFlags2 = GetLittleUInt();
-
-	return IL_TRUE;
-}
-
-
 // Internal function to get the header and check it.
 ILboolean iIsValidDds()
 {
@@ -177,19 +162,6 @@ ILboolean iCheckDds(DDSHEAD *Head)
 	if (Head->Size2 != 32)
 		return IL_FALSE;
 	if (Head->Width == 0 || Head->Height == 0)
-		return IL_FALSE;
-	return IL_TRUE;
-}
-
-
-// Internal function used to check if the HEADER is a valid DirectX 10 extension header.
-ILboolean iCheckDxt10(DXT10HEAD *Head)
-{
-	if (Head->resourceDimension < 2 && Head->resourceDimension > 4)
-		return IL_FALSE;
-	if (Head->dxgiFormat > DXGI_FORMAT_V408)
-		return IL_FALSE;
-	if (Head->arraySize > 1)  //@TODO: Support texture arrays
 		return IL_FALSE;
 	return IL_TRUE;
 }
@@ -309,21 +281,18 @@ ILubyte iCompFormatToChannelCount(ILenum Format)
 }
 
 
-ILboolean iLoadDdsCubemapInternal(ILuint CompFormat, ILboolean IsDXT10)
+ILboolean iLoadDdsCubemapInternal(ILuint CompFormat)
 {
 	ILuint	i;
 	ILubyte	Bpp, Channels, Bpc;
 	ILimage *startImage;
-
-	if (IsDXT10)  //@TODO: Get this working with the DirectX 10 textures
-		return IL_FALSE;
 
 	CompData = NULL;
 
 	Bpp = iCompFormatToBpp(CompFormat);
 	Channels = iCompFormatToChannelCount(CompFormat);
 	Bpc = iCompFormatToBpc(CompFormat);
-	if (CompFormat == PF_LUMINANCE && Head.RGBBitCount == 16 && Head.RBitMask == 0xFFFF) {  //@TODO: This is a HACK.
+	if (CompFormat == PF_LUMINANCE && Head.RGBBitCount == 16 && Head.RBitMask == 0xFFFF) { //@TODO: This is a HACK.
 		Bpc = 2; Bpp = 2;
 	}
 
@@ -359,10 +328,10 @@ ILboolean iLoadDdsCubemapInternal(ILuint CompFormat, ILboolean IsDXT10)
 				ilActiveFace(i);
 			}
 
-			if (!ReadData(CompFormat, IsDXT10))
+			if (!ReadData())
 				return IL_FALSE;
 
-			if (!AllocImage(CompFormat, IsDXT10)) {
+			if (!AllocImage(CompFormat)) {
 				if (CompData) {
 					ifree(CompData);
 					CompData = NULL;
@@ -372,7 +341,7 @@ ILboolean iLoadDdsCubemapInternal(ILuint CompFormat, ILboolean IsDXT10)
 
 			Image->CubeFlags = CubemapDirections[i];
 
-			if (!DdsDecompress(CompFormat, IsDXT10)) {
+			if (!DdsDecompress(CompFormat)) {
 				if (CompData) {
 					ifree(CompData);
 					CompData = NULL;
@@ -380,7 +349,7 @@ ILboolean iLoadDdsCubemapInternal(ILuint CompFormat, ILboolean IsDXT10)
 				return IL_FALSE;
 			}
 
-			if (!ReadMipmaps(CompFormat, IsDXT10)) {
+			if (!ReadMipmaps(CompFormat)) {
 				if (CompData) {
 					ifree(CompData);
 					CompData = NULL;
@@ -402,58 +371,31 @@ ILboolean iLoadDdsCubemapInternal(ILuint CompFormat, ILboolean IsDXT10)
 
 ILboolean iLoadDdsInternal()
 {
-	ILuint		BlockSize = 0;
-	ILuint		CompFormat;
-	ILboolean	IsDXT10 = IL_FALSE;
+	ILuint	BlockSize = 0;
+	ILuint	CompFormat;
 
 	CompData = NULL;
 	Image = NULL;
 
-	if (iCurImage == NULL)
-	{
+	if (iCurImage == NULL) {
 		ilSetError(IL_ILLEGAL_OPERATION);
 		return IL_FALSE;
 	}
 
-	if (!iGetDdsHead(&Head))
-	{
+	if (!iGetDdsHead(&Head)) {
 		ilSetError(IL_INVALID_FILE_HEADER);
 		return IL_FALSE;
 	}
-	if (!iCheckDds(&Head))
-	{
+	if (!iCheckDds(&Head)) {
 		ilSetError(IL_INVALID_FILE_HEADER);
 		return IL_FALSE;
 	}
 
 	BlockSize = DecodePixelFormat(&CompFormat);
-	if (CompFormat == PF_UNKNOWN)
-	{
+	if (CompFormat == PF_UNKNOWN) {
 		ilSetError(IL_INVALID_FILE_HEADER);
 		return IL_FALSE;
 	}
-
-	if (CompFormat == PF_DX10)
-	{
-		IsDXT10 = IL_TRUE;
-		if (!iGetDXT10Head(&HeadDXT10))
-		{
-			ilSetError(IL_INVALID_FILE_HEADER);
-			return IL_FALSE;
-		}
-		if (!iCheckDxt10(&HeadDXT10))
-		{
-			ilSetError(IL_INVALID_FILE_HEADER);
-			return IL_FALSE;
-		}
-
-		CompFormat = HeadDXT10.dxgiFormat;
-	}
-	else
-	{
-	}
-
-	// Needed for DXT10?
 	Check16BitComponents(&Head);
 
 	// Microsoft bug, they're not following their own documentation.
@@ -466,7 +408,7 @@ ILboolean iLoadDdsInternal()
 	Image = iCurImage;
 	if (Head.ddsCaps1 & DDS_COMPLEX) {
 		if (Head.ddsCaps2 & DDS_CUBEMAP) {
-			if (!iLoadDdsCubemapInternal(CompFormat, IsDXT10))
+			if (!iLoadDdsCubemapInternal(CompFormat))
 				return IL_FALSE;
 			return IL_TRUE;
 		}
@@ -475,18 +417,18 @@ ILboolean iLoadDdsInternal()
 	Width = Head.Width;
 	Height = Head.Height;
 	Depth = Head.Depth;
-	AdjustVolumeTexture(&Head, CompFormat, IsDXT10);
+	AdjustVolumeTexture(&Head, CompFormat);
 
-	if (!ReadData(CompFormat, IsDXT10))
+	if (!ReadData())
 		return IL_FALSE;
-	if (!AllocImage(CompFormat, IsDXT10)) {
+	if (!AllocImage(CompFormat)) {
 		if (CompData) {
 			ifree(CompData);
 			CompData = NULL;
 		}
 		return IL_FALSE;
 	}
-	if (!DdsDecompress(CompFormat, IsDXT10)) {
+	if (!DdsDecompress(CompFormat)) {
 		if (CompData) {
 			ifree(CompData);
 			CompData = NULL;
@@ -494,7 +436,7 @@ ILboolean iLoadDdsInternal()
 		return IL_FALSE;
 	}
 
-	if (!ReadMipmaps(CompFormat, IsDXT10)) {
+	if (!ReadMipmaps(CompFormat)) {
 		if (CompData) {
 			ifree(CompData);
 			CompData = NULL;
@@ -543,10 +485,6 @@ ILuint DecodePixelFormat(ILuint *CompFormat)
 			case IL_MAKEFOURCC('D','X','T','5'):
 				*CompFormat = PF_DXT5;
 				BlockSize *= 16;
-				break;
-
-			case IL_MAKEFOURCC('D', 'X', '1', '0'):
-				*CompFormat = PF_DX10;
 				break;
 
 			case IL_MAKEFOURCC('A', 'T', 'I', '1'):
@@ -627,146 +565,11 @@ ILuint DecodePixelFormat(ILuint *CompFormat)
 }
 
 
-// From https://msdn.microsoft.com/en-us/windows/uwp/gaming/complete-code-for-ddstextureloader
-//
-//--------------------------------------------------------------------------------------
-// Return the BPP for a particular format.
-//--------------------------------------------------------------------------------------
-static size_t BitsPerPixel(DXGI_FORMAT fmt)
-{
-	switch (fmt)
-	{
-	case DXGI_FORMAT_R32G32B32A32_TYPELESS:
-	case DXGI_FORMAT_R32G32B32A32_FLOAT:
-	case DXGI_FORMAT_R32G32B32A32_UINT:
-	case DXGI_FORMAT_R32G32B32A32_SINT:
-		return 128;
-
-	case DXGI_FORMAT_R32G32B32_TYPELESS:
-	case DXGI_FORMAT_R32G32B32_FLOAT:
-	case DXGI_FORMAT_R32G32B32_UINT:
-	case DXGI_FORMAT_R32G32B32_SINT:
-		return 96;
-
-	case DXGI_FORMAT_R16G16B16A16_TYPELESS:
-	case DXGI_FORMAT_R16G16B16A16_FLOAT:
-	case DXGI_FORMAT_R16G16B16A16_UNORM:
-	case DXGI_FORMAT_R16G16B16A16_UINT:
-	case DXGI_FORMAT_R16G16B16A16_SNORM:
-	case DXGI_FORMAT_R16G16B16A16_SINT:
-	case DXGI_FORMAT_R32G32_TYPELESS:
-	case DXGI_FORMAT_R32G32_FLOAT:
-	case DXGI_FORMAT_R32G32_UINT:
-	case DXGI_FORMAT_R32G32_SINT:
-	case DXGI_FORMAT_R32G8X24_TYPELESS:
-	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-	case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
-	case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
-		return 64;
-
-	case DXGI_FORMAT_R10G10B10A2_TYPELESS:
-	case DXGI_FORMAT_R10G10B10A2_UNORM:
-	case DXGI_FORMAT_R10G10B10A2_UINT:
-	case DXGI_FORMAT_R11G11B10_FLOAT:
-	case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-	case DXGI_FORMAT_R8G8B8A8_UNORM:
-	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-	case DXGI_FORMAT_R8G8B8A8_UINT:
-	case DXGI_FORMAT_R8G8B8A8_SNORM:
-	case DXGI_FORMAT_R8G8B8A8_SINT:
-	case DXGI_FORMAT_R16G16_TYPELESS:
-	case DXGI_FORMAT_R16G16_FLOAT:
-	case DXGI_FORMAT_R16G16_UNORM:
-	case DXGI_FORMAT_R16G16_UINT:
-	case DXGI_FORMAT_R16G16_SNORM:
-	case DXGI_FORMAT_R16G16_SINT:
-	case DXGI_FORMAT_R32_TYPELESS:
-	case DXGI_FORMAT_D32_FLOAT:
-	case DXGI_FORMAT_R32_FLOAT:
-	case DXGI_FORMAT_R32_UINT:
-	case DXGI_FORMAT_R32_SINT:
-	case DXGI_FORMAT_R24G8_TYPELESS:
-	case DXGI_FORMAT_D24_UNORM_S8_UINT:
-	case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
-	case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
-	case DXGI_FORMAT_R9G9B9E5_SHAREDEXP:
-	case DXGI_FORMAT_R8G8_B8G8_UNORM:
-	case DXGI_FORMAT_G8R8_G8B8_UNORM:
-	case DXGI_FORMAT_B8G8R8A8_UNORM:
-	case DXGI_FORMAT_B8G8R8X8_UNORM:
-	case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM:
-	case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-	case DXGI_FORMAT_B8G8R8X8_TYPELESS:
-	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-		return 32;
-
-	case DXGI_FORMAT_R8G8_TYPELESS:
-	case DXGI_FORMAT_R8G8_UNORM:
-	case DXGI_FORMAT_R8G8_UINT:
-	case DXGI_FORMAT_R8G8_SNORM:
-	case DXGI_FORMAT_R8G8_SINT:
-	case DXGI_FORMAT_R16_TYPELESS:
-	case DXGI_FORMAT_R16_FLOAT:
-	case DXGI_FORMAT_D16_UNORM:
-	case DXGI_FORMAT_R16_UNORM:
-	case DXGI_FORMAT_R16_UINT:
-	case DXGI_FORMAT_R16_SNORM:
-	case DXGI_FORMAT_R16_SINT:
-	case DXGI_FORMAT_B5G6R5_UNORM:
-	case DXGI_FORMAT_B5G5R5A1_UNORM:
-	case DXGI_FORMAT_B4G4R4A4_UNORM:
-		return 16;
-
-	case DXGI_FORMAT_R8_TYPELESS:
-	case DXGI_FORMAT_R8_UNORM:
-	case DXGI_FORMAT_R8_UINT:
-	case DXGI_FORMAT_R8_SNORM:
-	case DXGI_FORMAT_R8_SINT:
-	case DXGI_FORMAT_A8_UNORM:
-		return 8;
-
-	case DXGI_FORMAT_R1_UNORM:
-		return 1;
-
-	case DXGI_FORMAT_BC1_TYPELESS:
-	case DXGI_FORMAT_BC1_UNORM:
-	case DXGI_FORMAT_BC1_UNORM_SRGB:
-	case DXGI_FORMAT_BC4_TYPELESS:
-	case DXGI_FORMAT_BC4_UNORM:
-	case DXGI_FORMAT_BC4_SNORM:
-		return 4;
-
-	case DXGI_FORMAT_BC2_TYPELESS:
-	case DXGI_FORMAT_BC2_UNORM:
-	case DXGI_FORMAT_BC2_UNORM_SRGB:
-	case DXGI_FORMAT_BC3_TYPELESS:
-	case DXGI_FORMAT_BC3_UNORM:
-	case DXGI_FORMAT_BC3_UNORM_SRGB:
-	case DXGI_FORMAT_BC5_TYPELESS:
-	case DXGI_FORMAT_BC5_UNORM:
-	case DXGI_FORMAT_BC5_SNORM:
-	case DXGI_FORMAT_BC6H_TYPELESS:
-	case DXGI_FORMAT_BC6H_UF16:
-	case DXGI_FORMAT_BC6H_SF16:
-	case DXGI_FORMAT_BC7_TYPELESS:
-	case DXGI_FORMAT_BC7_UNORM:
-	case DXGI_FORMAT_BC7_UNORM_SRGB:
-		return 8;
-
-	default:
-		return 0;
-	}
-}
-
-
 // The few volume textures that I have don't have consistent LinearSize
 //	entries, even though the DDS_LINEARSIZE flag is set.
-void AdjustVolumeTexture(DDSHEAD *Head, ILuint CompFormat, ILboolean IsDXT10)
+void AdjustVolumeTexture(DDSHEAD *Head, ILuint CompFormat)
 {
 	if (Head->Depth <= 1)
-		return;
-	if (IsDXT10)
 		return;
 
 	// All volume textures I've seem so far didn't have the DDS_COMPLEX flag set,
@@ -824,7 +627,7 @@ void AdjustVolumeTexture(DDSHEAD *Head, ILuint CompFormat, ILboolean IsDXT10)
 
 
 // Reads the compressed data
-ILboolean ReadData(ILuint CompFormat, ILboolean IsDXT10)
+ILboolean ReadData()
 {
 	ILuint	Bps;
 	ILint	y, z;
@@ -850,15 +653,8 @@ ILboolean ReadData(ILuint CompFormat, ILboolean IsDXT10)
 		}
 	}
 	else {
-		if (IsDXT10)
-			Bps = Head.LinearSize;  //@TODO: Head.RGBBitCount is always 0 from the texconv.exe tool?
-		else
-			Bps = Width * Head.RGBBitCount / 8;
+		Bps = Width * Head.RGBBitCount / 8;
 		CompSize = Bps * Height * Depth;
-		if (CompSize == 0) {
-			ilSetError(IL_INVALID_FILE_HEADER);
-			return IL_FALSE;
-		}
 
 		CompData = (ILubyte*)ialloc(CompSize);
 		if (CompData == NULL) {
@@ -882,110 +678,85 @@ ILboolean ReadData(ILuint CompFormat, ILboolean IsDXT10)
 }
 
 
-ILboolean AllocImage(ILuint CompFormat, ILboolean IsDXT10)
+ILboolean AllocImage(ILuint CompFormat)
 {
 	ILubyte channels = 4;
 	ILenum format = IL_RGBA;
 
-	if (!IsDXT10)
+	switch (CompFormat)
 	{
-		switch (CompFormat)
-		{
-			case PF_RGB:
-				if (!ilTexImage(Width, Height, Depth, 3, IL_RGB, IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
-			case PF_ARGB:
-				if (!ilTexImage(Width, Height, Depth, 4, IL_RGBA, Has16BitComponents ? IL_UNSIGNED_SHORT : IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
+		case PF_RGB:
+			if (!ilTexImage(Width, Height, Depth, 3, IL_RGB, IL_UNSIGNED_BYTE, NULL))
+				return IL_FALSE;
+			break;
+		case PF_ARGB:
+			if (!ilTexImage(Width, Height, Depth, 4, IL_RGBA, Has16BitComponents ? IL_UNSIGNED_SHORT : IL_UNSIGNED_BYTE, NULL))
+				return IL_FALSE;
+			break;
 
-			case PF_LUMINANCE:
-				if (Head.RGBBitCount == 16 && Head.RBitMask == 0xFFFF) { //HACK
-					if (!ilTexImage(Width, Height, Depth, 1, IL_LUMINANCE, IL_UNSIGNED_SHORT, NULL))
-						return IL_FALSE;
-				}
-				else
-					if (!ilTexImage(Width, Height, Depth, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, NULL))
-						return IL_FALSE;
-				break;
-
-			case PF_LUMINANCE_ALPHA:
-				if (!ilTexImage(Width, Height, Depth, 2, IL_LUMINANCE_ALPHA, IL_UNSIGNED_BYTE, NULL))
+		case PF_LUMINANCE:
+			if (Head.RGBBitCount == 16 && Head.RBitMask == 0xFFFF) { //HACK
+				if (!ilTexImage(Width, Height, Depth, 1, IL_LUMINANCE, IL_UNSIGNED_SHORT, NULL))
 					return IL_FALSE;
-				break;
-
-			case PF_ATI1N:
-				//right now there's no OpenGL api to use the compressed 3dc data, so
-				//throw it away (I don't know how DirectX works, though)?
+			}
+			else
 				if (!ilTexImage(Width, Height, Depth, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, NULL))
 					return IL_FALSE;
-				break;
+			break;
 
-			case PF_3DC:
-				//right now there's no OpenGL api to use the compressed 3dc data, so
-				//throw it away (I don't know how DirectX works, though)?
-				if (!ilTexImage(Width, Height, Depth, 3, IL_RGB, IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
-
-			case PF_A16B16G16R16:
-				if (!ilTexImage(Width, Height, Depth, iCompFormatToChannelCount(CompFormat),
-					ilGetFormatBpp(iCompFormatToChannelCount(CompFormat)), IL_UNSIGNED_SHORT, NULL))
-					return IL_FALSE;
-				break;
-
-			case PF_R16F:
-			case PF_G16R16F:
-			case PF_A16B16G16R16F:
-			case PF_R32F:
-			case PF_G32R32F:
-			case PF_A32B32G32R32F:
-				if (!ilTexImage(Width, Height, Depth, iCompFormatToChannelCount(CompFormat),
-					ilGetFormatBpp(iCompFormatToChannelCount(CompFormat)), IL_FLOAT, NULL))
-					return IL_FALSE;
-				break;
-
-			default:
-				if (CompFormat == PF_RXGB) {
-					channels = 3; //normal map
-					format = IL_RGB;
-				}
-
-				if (!ilTexImage(Width, Height, Depth, channels, format, IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				if (ilGetInteger(IL_KEEP_DXTC_DATA) == IL_TRUE && CompData) {
-					iCurImage->DxtcData = (ILubyte*)ialloc(Head.LinearSize);
-					if (iCurImage->DxtcData == NULL)
-						return IL_FALSE;
-					iCurImage->DxtcFormat = CompFormat - PF_DXT1 + IL_DXT1;
-					iCurImage->DxtcSize = Head.LinearSize;
-					memcpy(iCurImage->DxtcData, CompData, iCurImage->DxtcSize);
-				}
-				break;
-		}
-	}
-	else
-	{
-		switch (CompFormat)
-		{
-			case DXGI_FORMAT_R8G8B8A8_UNORM:
-				if (!ilTexImage(Width, Height, Depth, 4, IL_RGBA, Has16BitComponents ? IL_UNSIGNED_SHORT : IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
-			case DXGI_FORMAT_B8G8R8A8_UNORM:
-				if (!ilTexImage(Width, Height, Depth, 4, IL_BGRA, Has16BitComponents ? IL_UNSIGNED_SHORT : IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
-			case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-				if (!ilTexImage(Width, Height, Depth, 4, IL_BGRA, Has16BitComponents ? IL_UNSIGNED_SHORT : IL_UNSIGNED_BYTE, NULL))
-					return IL_FALSE;
-				break;
-
-			default:
-				ilSetError(IL_INVALID_FILE_HEADER);
+		case PF_LUMINANCE_ALPHA:
+			if (!ilTexImage(Width, Height, Depth, 2, IL_LUMINANCE_ALPHA, IL_UNSIGNED_BYTE, NULL))
 				return IL_FALSE;
-		}
+			break;
+
+		case PF_ATI1N:
+			//right now there's no OpenGL api to use the compressed 3dc data, so
+			//throw it away (I don't know how DirectX works, though)?
+			if (!ilTexImage(Width, Height, Depth, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, NULL))
+				return IL_FALSE;
+			break;
+
+		case PF_3DC:
+			//right now there's no OpenGL api to use the compressed 3dc data, so
+			//throw it away (I don't know how DirectX works, though)?
+			if (!ilTexImage(Width, Height, Depth, 3, IL_RGB, IL_UNSIGNED_BYTE, NULL))
+				return IL_FALSE;
+			break;
+
+		case PF_A16B16G16R16:
+			if (!ilTexImage(Width, Height, Depth, iCompFormatToChannelCount(CompFormat),
+				ilGetFormatBpp(iCompFormatToChannelCount(CompFormat)), IL_UNSIGNED_SHORT, NULL))
+				return IL_FALSE;
+			break;
+
+		case PF_R16F:
+		case PF_G16R16F:
+		case PF_A16B16G16R16F:
+		case PF_R32F:
+		case PF_G32R32F:
+		case PF_A32B32G32R32F:
+			if (!ilTexImage(Width, Height, Depth, iCompFormatToChannelCount(CompFormat),
+				ilGetFormatBpp(iCompFormatToChannelCount(CompFormat)), IL_FLOAT, NULL))
+				return IL_FALSE;
+			break;
+
+		default:
+			if (CompFormat == PF_RXGB) {
+				channels = 3; //normal map
+				format = IL_RGB;
+			}
+
+			if (!ilTexImage(Width, Height, Depth, channels, format, IL_UNSIGNED_BYTE, NULL))
+				return IL_FALSE;
+			if (ilGetInteger(IL_KEEP_DXTC_DATA) == IL_TRUE && CompData) {
+				iCurImage->DxtcData = (ILubyte*)ialloc(Head.LinearSize);
+				if (iCurImage->DxtcData == NULL)
+					return IL_FALSE;
+				iCurImage->DxtcFormat = CompFormat - PF_DXT1 + IL_DXT1;
+				iCurImage->DxtcSize = Head.LinearSize;
+				memcpy(iCurImage->DxtcData, CompData, iCurImage->DxtcSize);
+			}
+			break;
 	}
 
 	Image->Origin = IL_ORIGIN_UPPER_LEFT;
@@ -1008,13 +779,8 @@ ILboolean AllocImage(ILuint CompFormat, ILboolean IsDXT10)
  *
  * @TODO: don't use globals, clean this function (and this file) up
  */
-ILboolean DdsDecompress(ILuint CompFormat, ILboolean IsDXT10)
+ILboolean DdsDecompress(ILuint CompFormat)
 {
-	if (IsDXT10)
-	{  //@TODO: Put in compressed formats
-		return DecompressARGBDX10(CompFormat);
-	}
-
 	switch (CompFormat)
 	{
 		case PF_ARGB:
@@ -1067,7 +833,7 @@ ILboolean DdsDecompress(ILuint CompFormat, ILboolean IsDXT10)
 }
 
 
-ILboolean ReadMipmaps(ILuint CompFormat, ILboolean IsDXT10)
+ILboolean ReadMipmaps(ILuint CompFormat)
 {
 	ILuint	i, CompFactor=0;
 	ILubyte	Bpp, Channels, Bpc;
@@ -1076,9 +842,6 @@ ILboolean ReadMipmaps(ILuint CompFormat, ILboolean IsDXT10)
 	ILuint	minW, minH;
 
 	ILboolean isCompressed = IL_FALSE;
-
-	if (IsDXT10)  //@TODO: Add in mipmap support
-		return IL_TRUE;
 
 	Bpp = iCompFormatToBpp(CompFormat);
 	Channels = iCompFormatToChannelCount(CompFormat);
@@ -1128,8 +891,7 @@ ILboolean ReadMipmaps(ILuint CompFormat, ILboolean IsDXT10)
 	}
 
 	LastLinear = Head.LinearSize;
-	for (i = 0; i < Head.MipMapCount - 1; i++)
-	{
+	for (i = 0; i < Head.MipMapCount - 1; i++) {
 		Depth = Depth / 2;
 		Width = Width / 2;
 		Height = Height / 2;
@@ -1183,7 +945,7 @@ ILboolean ReadMipmaps(ILuint CompFormat, ILboolean IsDXT10)
 			Head.LinearSize >>= 1;
 		}
 
-		if (!ReadData(CompFormat, IsDXT10))
+		if (!ReadData())
 			goto mip_fail;
 
 		if (ilGetInteger(IL_KEEP_DXTC_DATA) == IL_TRUE && isCompressed == IL_TRUE && CompData) {
@@ -1195,7 +957,7 @@ ILboolean ReadMipmaps(ILuint CompFormat, ILboolean IsDXT10)
 			memcpy(Image->DxtcData, CompData, Image->DxtcSize);
 		}
 
-		if (!DdsDecompress(CompFormat, IsDXT10))
+		if (!DdsDecompress(CompFormat))
 			goto mip_fail;
 	}
 
@@ -1919,14 +1681,6 @@ void CorrectPreMult()
 }
 
 
-ILboolean DecompressARGBDX10(ILuint CompFormat)
-{
-	//@TODO: Will certainly fail if iCurImage->SizeOfData != "Compressed" Size
-	memcpy(iCurImage->Data, CompData, iCurImage->SizeOfData);
-	return IL_TRUE;
-}
-
-
 ILboolean DecompressARGB(ILuint CompFormat)
 {
 	ILuint ReadI = 0, TempBpp, i;
@@ -2235,8 +1989,7 @@ ILAPI ILboolean ILAPIENTRY ilDxtcDataToSurface()
 		case IL_DXT5: CompFormat = PF_DXT5; break;
 	}
 	CompData = iCurImage->DxtcData;
-	DdsDecompress(CompFormat, IL_FALSE); //@TODO: globals suck...fix this
-	//@TODO: Should we ever expect this to be IL_TRUE?
+	DdsDecompress(CompFormat); //globals suck...fix this
 
 	//@TODO: origin should be set in Decompress()...
 	iCurImage->Origin = IL_ORIGIN_UPPER_LEFT;
